@@ -11,6 +11,7 @@ student@control:~/cka$ history
    10  sudo apt install jq -y
    11  history
    12  sudo kubeadm init
+       sudo kubeadm init --control-plane-endpoint "172.23.84.147:6443" --pod-network-cidr=192.168.0.0/16
    13  history
    14  mkdir ~/.kube
    15  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
