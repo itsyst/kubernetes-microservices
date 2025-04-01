@@ -3,7 +3,7 @@ apiVersion: v1
 metadata:
   name: pv-claim
 spec:
-  storageClassName: demo
+  storageClassName: demo # Should mutch the storage class name in the persistance volume
   accessModes:
     - ReadWriteOnce
   resources:

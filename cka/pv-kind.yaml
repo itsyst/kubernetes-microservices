@@ -1,0 +1,45 @@
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: pv-volume
+  labels:
+    type: local
+spec:
+  storageClassName: standard  # Use Minikube's default StorageClass
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mydata"
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: pv-claim
+spec:
+  storageClassName: standard  # Match PV
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi  # Match PV capacity
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: pv-pod
+spec:
+  volumes:
+    - name: pv-storage
+      persistentVolumeClaim:
+        claimName: pv-claim
+  containers:
+    - name: pv-container
+      image: nginx
+      ports:
+        - containerPort: 80
+          name: "http-server"
+      volumeMounts:
+        - mountPath: "/usr/share/nginx/html"
+          name: pv-storage
