@@ -1,0 +1,240 @@
+The issue is clear: the web-0 pod is stuck in Pending because its PersistentVolumeClaim (PVC), www-web-0, isn’t binding to a PersistentVolume (PV). This is expected in your kind cluster because kind doesn’t include a default storage provisioner to dynamically create PVs for PVCs. Let’s break this down and fix it.
+Diagnosis
+From kubectl describe pod web-0
+
+    Status: Pending
+    Node: <none> (not scheduled yet).
+    Volume: www references a PVC named www-web-0.
+    Events: <none> (no events logged, which is unusual—likely because the scheduler is still waiting for the PVC).
+
+From statefuldemo.yaml
+
+    StatefulSet: Defines 3 replicas (web-0, web-1, web-2).
+    VolumeClaimTemplates: Requests a PVC named www per pod with:
+        accessModes: ["ReadWriteMany"]
+        resources.requests.storage: 1Gi
+    Problem: kind doesn’t have a StorageClass or provisioner set up by default to satisfy this PVC, so the pods can’t start.
+
+Why It’s Pending
+
+    Each pod in the StatefulSet needs a unique PVC (e.g., www-web-0, www-web-1, www-web-2).
+    With ReadWriteMany, the PVC requires a storage backend that supports multiple writers (e.g., NFS), but kind doesn’t provide this out of the box.
+    Without a bound PV, the pod remains unschedulable.
+
+Check PVC Status
+
+Run:
+bash
+kubectl get pvc
+
+Likely output:
+text
+NAME         STATUS    VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+www-web-0    Pending                                      1m
+
+The Pending status confirms the PVC isn’t binding.
+Fix Options
+
+You have two main paths forward:
+Option 1: Remove Storage (Quick Test)
+
+If you don’t need persistent storage for now, remove the volumeClaimTemplates and volumeMounts from statefuldemo.yaml. Edit it to:
+yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  ports:
+  - port: 80
+    name: web
+  clusterIP: None
+  selector:
+    app: nginx
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: web
+spec:
+  selector:
+    matchLabels:
+      app: nginx 
+  serviceName: "nginx"
+  replicas: 3 
+  template:
+    metadata:
+      labels:
+        app: nginx 
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: nginx
+        image: k8s.gcr.io/nginx-slim:0.8
+        ports:
+        - containerPort: 80
+          name: web
+
+Then:
+bash
+kubectl delete -f statefuldemo.yaml
+kubectl apply -f statefuldemo.yaml
+
+Check:
+bash
+kubectl get pods
+kubectl get statefulset
+
+This should get web-0, web-1, and web-2 running without storage dependencies.
+Option 2: Add a Storage Provisioner
+
+To keep the storage as defined, set up a provisioner in kind. The local-path-provisioner from Rancher is a simple option, though it only supports ReadWriteOnce (not ReadWriteMany). For ReadWriteMany, you’d need something like NFS, which is trickier in kind. Let’s try local-path-provisioner first and adjust the access mode:
+
+    Install Local Path Provisioner:
+    bash
+
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+Verify:
+bash
+kubectl get storageclass
+You’ll see local-path as the default StorageClass.
+Update statefuldemo.yaml: Change ReadWriteMany to ReadWriteOnce (since local-path doesn’t support ReadWriteMany):
+yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  ports:
+  - port: 80
+    name: web
+  clusterIP: None
+  selector:
+    app: nginx
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: web
+spec:
+  selector:
+    matchLabels:
+      app: nginx 
+  serviceName: "nginx"
+  replicas: 3 
+  template:
+    metadata:
+      labels:
+        app: nginx 
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: nginx
+        image: k8s.gcr.io/nginx-slim:0.8
+        ports:
+        - containerPort: 80
+          name: web
+        volumeMounts:
+        - name: www
+          mountPath: /usr/share/nginx/html
+  volumeClaimTemplates:
+  - metadata:
+      name: www
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+Reapply:
+bash
+kubectl delete -f statefuldemo.yaml
+kubectl apply -f statefuldemo.yaml
+Verify:
+bash
+
+    kubectl get pvc
+    kubectl get pods
+    kubectl get statefulset
+    The PVCs should now be Bound, and the pods should transition to Running.
+
+Option 3: Use NFS for ReadWriteMany (Advanced)
+
+If you specifically need ReadWriteMany, you’d need to set up an NFS server in your WSL environment and configure a StorageClass for it. This is complex in kind and WSL, so I’d recommend sticking with Option 2 unless ReadWriteMany is critical.
+Recommendation
+
+Since you’re in a kind cluster on WSL (likely for learning or testing), Option 2 with ReadWriteOnce is the most practical. It keeps your storage setup while working within kind’s limitations. Here’s the full sequence:
+bash
+# Install local-path-provisioner
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+
+# Update and reapply statefuldemo.yaml
+cat <<EOF > statefuldemo.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  ports:
+  - port: 80
+    name: web
+  clusterIP: None
+  selector:
+    app: nginx
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: web
+spec:
+  selector:
+    matchLabels:
+      app: nginx 
+  serviceName: "nginx"
+  replicas: 3 
+  template:
+    metadata:
+      labels:
+        app: nginx 
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: nginx
+        image: k8s.gcr.io/nginx-slim:0.8
+        ports:
+        - containerPort: 80
+          name: web
+        volumeMounts:
+        - name: www
+          mountPath: /usr/share/nginx/html
+  volumeClaimTemplates:
+  - metadata:
+      name: www
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+EOF
+
+kubectl delete -f statefuldemo.yaml
+kubectl apply -f statefuldemo.yaml
+
+# Check status
+kubectl get pvc
+kubectl get pods
+kubectl get statefulset
+Next Steps
+
+Run the commands above and share the output of:
+
+    kubectl get pvc
+    kubectl get pods
+    kubectl get statefulset
+
+This should get your StatefulSet running with 3 replicas. 
