@@ -1,0 +1,165 @@
+Step 1: Install Helm
+
+Here’s how to install Helm on your system, depending on your operating system. I’ll assume you’re on a Linux/macOS/Windows system (let me know if otherwise).
+On Linux/macOS
+
+    Download Helm:
+    bash
+
+curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
+Run the Installer:
+bash
+chmod +x get_helm.sh
+./get_helm.sh
+Verify Installation:
+bash
+helm version
+You should see output like:
+text
+
+    version.BuildInfo{Version:"v3.14.0", GitCommit:"..."}
+
+On Windows (Using PowerShell)
+
+    Install via Chocolatey (if you have Chocolatey installed):
+    powershell
+
+choco install kubernetes-helm
+Or Manual Download:
+
+    Download the latest Helm binary from GitHub Releases (e.g., helm-v3.14.0-windows-amd64.zip).
+    Extract it and move helm.exe to a directory in your PATH (e.g., C:\Program Files\helm).
+    Add that directory to your PATH if needed.
+
+Verify:
+powershell
+
+    helm version
+
+Alternative: Using a Package Manager
+
+    Homebrew (macOS):
+    bash
+
+brew install helm
+Apt (Ubuntu/Debian):
+bash
+
+    curl https://baltocdn.com/helm/signing.asc | sudo apt-key add -
+    sudo apt-get update
+    sudo apt-get install helm
+
+Step 2: Run the Helm Command
+
+Once Helm is installed, run your original command to install the ingress-nginx controller:
+bash
+helm upgrade --install ingress-nginx ingress-nginx \
+  --repo https://kubernetes.github.io/ingress-nginx \
+  --namespace ingress-nginx \
+  --create-namespace
+What This Does:
+
+    upgrade --install: Installs the chart if it’s not present, or upgrades it if it is.
+    ingress-nginx: The release name for this Helm deployment.
+    --repo: Specifies the Helm chart repository.
+    --namespace ingress-nginx: Deploys it in the ingress-nginx namespace.
+    --create-namespace: Creates the namespace if it doesn’t exist.
+
+Step 3: Verify the Installation
+
+After running the command, check that the ingress controller is deployed:
+
+    List Helm Releases:
+    bash
+
+helm list -n ingress-nginx
+You should see:
+text
+NAME          NAMESPACE      REVISION  UPDATED  STATUS   CHART            APP VERSION
+ingress-nginx ingress-nginx  1         ...      deployed ingress-nginx-... ...
+Check Pods:
+bash
+kubectl get pods -n ingress-nginx
+Look for pods like ingress-nginx-controller-... with Running status:
+text
+NAME                                        READY   STATUS    RESTARTS   AGE
+ingress-nginx-controller-5b5f5f5b5f-abcde   1/1     Running   0          2m
+Check Services:
+bash
+kubectl get svc -n ingress-nginx
+You’ll see something like:
+text
+
+    NAME                    TYPE           CLUSTER-IP      EXTERNAL-IP   PORT(S)                      AGE
+    ingress-nginx-controller   LoadBalancer   10.96.123.45    <pending>     80:31234/TCP,443:32456/TCP   2m
+
+Step 4: Make It Work with Minikube
+
+Since you’re using Minikube, the LoadBalancer service type won’t get an external IP by default (it’ll show <pending>). To access the ingress controller:
+Option 1: Use Minikube Tunnel
+
+Run this in a separate terminal:
+bash
+minikube tunnel
+
+Then check the service again:
+bash
+kubectl get svc -n ingress-nginx
+
+It should now show an EXTERNAL-IP (e.g., 127.0.0.1). You can use that IP to access the ingress controller.
+Option 2: Use NodePort
+
+If you don’t want to use minikube tunnel, modify the Helm values to use NodePort instead of LoadBalancer:
+bash
+helm upgrade --install ingress-nginx ingress-nginx \
+  --repo https://kubernetes.github.io/ingress-nginx \
+  --namespace ingress-nginx \
+  --create-namespace \
+  --set controller.service.type=NodePort
+
+Then:
+bash
+kubectl get svc -n ingress-nginx
+
+Note the NodePort (e.g., 80:31234/TCP), and access it via minikube ip (e.g., 192.168.58.2:31234).
+Step 5: Test with Your webshop
+
+Assuming your webshop deployment is still running, create an Ingress resource to route traffic through the ingress controller:
+yaml
+# ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: webshop-ingress
+  namespace: default
+spec:
+  rules:
+  - host: webshop.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: webshop
+            port:
+              number: 80
+
+Apply it:
+bash
+kubectl apply -f ingress.yaml
+
+Add webshop.local to your /etc/hosts (or C:\Windows\System32\drivers\etc\hosts on Windows):
+text
+192.168.58.2 webshop.local  # Use your minikube ip
+
+Test:
+bash
+curl http://webshop.local
+Next Steps
+
+    Install Helm using the steps above.
+    Run the Helm command.
+    Let me know the output of kubectl get pods -n ingress-nginx or any errors.
+
+Once this is working, your webshop (Nginx) should be accessible via the ingress controller.

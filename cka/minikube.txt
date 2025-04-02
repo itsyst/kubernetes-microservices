@@ -1,0 +1,33 @@
+Start the initial cluster with one node (this will be the control-plane):
+minikube start --nodes 1 --driver=docker
+
+Minikube offers a built-in Calico implementation, this is a quick way to checkout Calico features.
+minikube start --cni=calico
+
+Verify Calico installation
+watch kubectl get pods -l k8s-app=calico-node -A
+
+
+Add an additional worker node
+kubectl get nodes
+minikube delete
+
+
+
+Verify with Minikube: 
+curl 192.168.58.2:32361
+Alternatively, use Minikube’s shortcut to open the service:
+minikube service webshop
+
+
+Check Pod Details:
+Inspect one of the pods to see what image it’s running:
+kubectl describe pod webshop-76c798bd45-bdwhg
+
+
+
+
+
+----
+kubectl create deploy webshop --image=nginx --replicas=3
+kubectl expose deploy webshop --type=NodePort --port=80
