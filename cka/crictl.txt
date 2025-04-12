@@ -1,0 +1,55 @@
+Below are the steps to resolve the tar: crictl: Cannot open: Permission denied error and install crictl in WSL2 for use with your Kind cluster, formatted as plain text for easy copying into a separate document.
+Steps to Install crictl in WSL2 and Use with Kind Cluster
+1. Check Permissions of /usr/local/bin
+text
+ls -ld /usr/local/bin
+2. Install crictl with sudo
+text
+VERSION="v1.30.0"
+curl -L https://github.com/kubernetes-sigs/cri-tools/releases/download/$VERSION/crictl-$VERSION-linux-amd64.tar.gz | sudo tar -xz -C /usr/local/bin
+3. Verify crictl Installation
+text
+crictl version
+4. Alternative: Install to User-Writable Directory
+text
+VERSION="v1.30.0"
+mkdir -p ~/bin
+curl -L https://github.com/kubernetes-sigs/cri-tools/releases/download/$VERSION/crictl-$VERSION-linux-amd64.tar.gz | tar -xz -C ~/bin
+echo 'export PATH=$PATH:~/bin' >> ~/.bashrc
+source ~/.bashrc
+crictl version
+5. Fix Ownership (Optional)
+text
+sudo chown root:root /usr/local/bin/crictl
+sudo chmod 755 /usr/local/bin/crictl
+6. Use crictl with Kind Cluster
+Access a Kind Node
+text
+docker exec -it my-cluster-control-plane bash
+
+OR for a worker node:
+text
+docker exec -it my-cluster-worker bash
+Configure crictl Inside the Node
+text
+cat <<EOF > /etc/crictl.yaml
+runtime-endpoint: unix:///run/containerd/containerd.sock
+image-endpoint: unix:///run/containerd/containerd.sock
+timeout: 10
+debug: false
+EOF
+Test crictl
+text
+crictl pods
+crictl ps
+7. Troubleshooting
+Check PATH
+text
+echo $PATH
+export PATH=$PATH:/usr/local/bin
+Fix Socket Permissions Inside Node
+text
+chmod 666 /run/containerd/containerd.sock
+Restart Docker in WSL2
+text
+sudo service docker restart3,02
