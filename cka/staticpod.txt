@@ -1,0 +1,8 @@
+kubectl run static --image=nginx --dry-run=client -o  yaml
+
+copy the generated code 
+cd /etc/kubernetes/manifests
+sudo vim static.yaml 
+crictl pods 
+sudo crictl pods |  grep static 
+kubectl get pods to see static pod
